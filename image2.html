@@ -1,228 +1,70 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Strong Image Encryption</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Image Encryptor - Modern UI</title>
 <style>
-body {
-    font-family: Arial;
-    background: #f0f0f0;
-    display: flex;
-    justify-content: center;
-    padding: 40px;
-}
-.container {
-    background: white;
-    padding: 25px;
-    width: 450px;
-    border-radius: 15px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
-}
-button {
-    width: 100%;
-    padding: 12px;
-    margin-top: 10px;
-    background: #0066ff;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-}
-canvas {
-    width: 100%;
-    border-radius: 10px;
-    margin-top: 20px;
-}
+body{margin:0;font-family:Arial,sans-serif;background:#f0f2f5;display:flex;justify-content:center;align-items:flex-start;padding:40px}
+.card{width:520px;background:#fff;border-radius:16px;padding:25px;box-shadow:0 12px 40px rgba(0,0,0,0.12)}
+h2{color:#1a237e;text-align:center;margin-bottom:15px}
+label{display:block;margin-top:15px;font-weight:600;color:#333}
+input[type=file], input[type=number]{width:100%;padding:12px;border-radius:10px;border:1px solid #d1d5db;margin-top:6px;box-sizing:border-box}
+.row{display:flex;gap:10px;margin-top:15px}
+button{flex:1;padding:14px;border-radius:12px;border:none;font-weight:700;cursor:pointer;color:#fff;transition:all 0.3s ease}
+button#btnEnc{background:linear-gradient(90deg,#5c6bc0,#3949ab)}
+button#btnDec{background:linear-gradient(90deg,#42a5f5,#1e88e5)}
+button:hover{opacity:0.85}
+canvas{display:block;margin:18px auto;border-radius:12px;max-width:100%;box-shadow:0 8px 24px rgba(0,0,0,0.08)}
+#downloadBtn{background:#4caf50;margin-top:12px;width:100%;padding:14px;border-radius:12px;border:none;color:#fff;font-weight:700;cursor:pointer;transition:all 0.3s ease}
+#downloadBtn:hover{opacity:0.85}
+#status{text-align:center;margin-top:8px;font-weight:600;color:#1e88e5}
+.small{font-size:13px;color:#555;margin-top:6px;text-align:center}
 </style>
 </head>
 <body>
-
-<div class="container">
-    <h2>Image Encryption</h2>
-
-    <input type="file" id="file" accept="image/*"><br><br>
-    <input type="number" id="key" value="12345" placeholder="Key"><br><br>
-
-    <button onclick="encrypt()">Encrypt</button>
-    <button onclick="decrypt()">Decrypt</button>
-    <button onclick="downloadCanvas()">Download</button>
-
-    <canvas id="canvas"></canvas>
-
-    <p id="status" style="color:#0066ff;font-weight:bold"></p>
+<div class="card">
+<h2>Image Encryptor — Modern UI</h2>
+<label>Choose Image (any size)</label>
+<input id="file" type="file" accept="image/*">
+<label>Key (number)</label>
+<input id="key" type="number" value="12345">
+<div class="row">
+<button id="btnEnc">Encrypt</button>
+<button id="btnDec">Decrypt</button>
 </div>
-
+<canvas id="cv"></canvas>
+<button id="downloadBtn">Download Result</button>
+<div id="status">No image loaded</div>
+<div class="small">Open this file on any device (no internet). Send the encrypted image + key to the other person. They can decrypt using the same file and key.</div>
+</div>
 <script>
-
-let canvas = document.getElementById("canvas");
-let ctx = canvas.getContext("2d");
-let original = null;
-
-// ---------------------- Load Image ------------------------
-document.getElementById("file").onchange = function (e) {
-    let img = new Image();
-    let file = e.target.files[0];
-    let reader = new FileReader();
-
-    document.getElementById("status").innerText = "Loading...";
-
-    reader.onload = function (event) {
-        img.onload = function () {
-            let max = 512;
-            let scale = Math.min(max/img.width, max/img.height, 1);
-            canvas.width = img.width * scale;
-            canvas.height = img.height * scale;
-
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-            original = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-            document.getElementById("status").innerText = "Image Loaded ✓";
-        }
-        img.src = event.target.result;
-    }
-    reader.readAsDataURL(file);
-}
-
-
-// ---------------------- Chaotic logistic ------------------------
-function chaoticArray(n, key) {
-    let x = (key % 9973) / 9973;
-    let arr = new Float64Array(n);
-
-    for (let i = 0; i < n; i++) {
-        x = 3.99 * x * (1 - x);
-        arr[i] = x;
-    }
-
-    return arr;
-}
-
-
-// ---------------------- Permutation ------------------------
-function permuteChannel(channel, key) {
-    let n = channel.length;
-    let chaos = chaoticArray(n, key);
-
-    let indices = Array.from({length:n}, (_,i)=>i);
-    indices.sort((a,b)=>chaos[a] - chaos[b]);
-
-    let out = new Uint8ClampedArray(n);
-    for (let i=0;i<n;i++) out[i] = channel[indices[i]];
-    return out;
-}
-
-function reversePermute(channel, key) {
-    let n = channel.length;
-    let chaos = chaoticArray(n, key);
-
-    let indices = Array.from({length:n}, (_,i)=>i);
-    indices.sort((a,b)=>chaos[a] - chaos[b]);
-
-    let out = new Uint8ClampedArray(n);
-    for (let i=0;i<n;i++) out[indices[i]] = channel[i];
-    return out;
-}
-
-
-// ---------------------- Strong Diffusion ------------------------
-function diffuse(channel, key) {
-    let out = new Uint8ClampedArray(channel.length);
-    let prev = key % 256;
-
-    for (let i = 0; i < channel.length; i++) {
-        out[i] = (channel[i] ^ prev ^ (i * 13 % 256));
-        prev = out[i];
-    }
-    return out;
-}
-
-function reverseDiffuse(channel, key) {
-    let out = new Uint8ClampedArray(channel.length);
-    let prev = key % 256;
-
-    for (let i = 0; i < channel.length; i++) {
-        out[i] = (channel[i] ^ prev ^ (i * 13 % 256));
-        prev = channel[i];
-    }
-    return out;
-}
-
-
-// ---------------------- Split/Merge RGB ------------------------
-function splitRGB(data) {
-    let R=[], G=[], B=[], A=[];
-    for (let i=0;i<data.length;i+=4){
-        R.push(data[i]);
-        G.push(data[i+1]);
-        B.push(data[i+2]);
-        A.push(data[i+3]);
-    }
-    return {R,G,B,A};
-}
-
-function mergeRGB(R,G,B,A) {
-    let out = new Uint8ClampedArray(R.length*4);
-    for (let i=0;i<R.length;i++){
-        out[i*4] = R[i];
-        out[i*4+1] = G[i];
-        out[i*4+2] = B[i];
-        out[i*4+3] = A[i];
-    }
-    return out;
-}
-
-
-// ---------------------- Encrypt ------------------------
-function encrypt() {
-    if (!original) return alert("Load image first.");
-
-    let key = parseInt(document.getElementById("key").value);
-    let data = original.data;
-    let {R,G,B,A} = splitRGB(data);
-
-    R = diffuse(permuteChannel(R, key), key);
-    G = diffuse(permuteChannel(G, key+111), key);
-    B = diffuse(permuteChannel(B, key+222), key);
-
-    let merged = mergeRGB(R,G,B,A);
-
-    ctx.putImageData(new ImageData(merged, canvas.width, canvas.height), 0, 0);
-
-    document.getElementById("status").innerText = "Encrypted ✓";
-}
-
-
-// ---------------------- Decrypt ------------------------
-function decrypt() {
-    if (!original) return alert("Load image first.");
-
-    let key = parseInt(document.getElementById("key").value);
-
-    let img = ctx.getImageData(0,0,canvas.width,canvas.height).data;
-    let {R,G,B,A} = splitRGB(img);
-
-    R = reversePermute(reverseDiffuse(R,key), key);
-    G = reversePermute(reverseDiffuse(G,key+111), key+111);
-    B = reversePermute(reverseDiffuse(B,key+222), key+222);
-
-    let merged = mergeRGB(R,G,B,A);
-
-    ctx.putImageData(new ImageData(merged, canvas.width, canvas.height), 0, 0);
-
-    document.getElementById("status").innerText = "Decrypted ✓";
-}
-
-
-// ---------------------- Download ------------------------
-function downloadCanvas() {
-    let a = document.createElement("a");
-    a.href = canvas.toDataURL();
-    a.download = "result.png";
-    a.click();
-}
-
+function makeLCG(seed){let x=(seed>>>0)||1;return()=>{x=(x*1664525+1013904223)>>>0;return x/4294967296;}} 
+function makeByteRng(seed){const r=makeLCG(seed);return()=>Math.floor(r()*256);}
+const fileInput=document.getElementById('file');
+const keyInput=document.getElementById('key');
+const btnEnc=document.getElementById('btnEnc');
+const btnDec=document.getElementById('btnDec');
+const downloadBtn=document.getElementById('downloadBtn');
+const status=document.getElementById('status');
+const canvas=document.getElementById('cv');
+const ctx=canvas.getContext('2d');
+let loadedImageData=null;
+fileInput.addEventListener('change',(e)=>{const f=e.target.files[0];if(!f)return;status.textContent='Loading image...';const reader=new FileReader();reader.onload=(ev)=>{const img=new Image();img.onload=()=>{const max=800;const scale=Math.min(max/img.width,max/img.height,1);canvas.width=Math.floor(img.width*scale);canvas.height=Math.floor(img.height*scale);ctx.drawImage(img,0,0,canvas.width,canvas.height);loadedImageData=ctx.getImageData(0,0,canvas.width,canvas.height);status.textContent='Image loaded ✓';};img.src=ev.target.result;};reader.readAsDataURL(f);});
+function splitChannels(imgData){const d=imgData.data;const n=d.length/4;const R=new Uint8ClampedArray(n);const G=new Uint8ClampedArray(n);const B=new Uint8ClampedArray(n);const A=new Uint8ClampedArray(n);for(let i=0,j=0;i<d.length;i+=4,j++){R[j]=d[i];G[j]=d[i+1];B[j]=d[i+2];A[j]=d[i+3];}return {R,G,B,A};}
+function mergeChannels(R,G,B,A){const n=R.length;const out=new Uint8ClampedArray(n*4);for(let i=0;i<n;i++){out[i*4]=R[i];out[i*4+1]=G[i];out[i*4+2]=B[i];out[i*4+3]=A[i];}return out;}
+function makePermutation(length,seed){const rng=makeLCG(seed);const indices=new Array(length);for(let i=0;i<length;i++)indices[i]=i;indices.sort((a,b)=>{const ra=rng(),rb=rng();if(ra<rb)return -1;if(ra>rb)return 1;return a-b;});return indices;}
+function invertPermutation(perm){const inv=new Array(perm.length);for(let i=0;i<perm.length;i++)inv[perm[i]]=i;return inv;}
+function diffuseArray(arr,seed){const out=new Uint8ClampedArray(arr.length);const byteRng=makeByteRng(seed);let prev=seed&0xFF;for(let i=0;i<arr.length;i++){const kb=byteRng();out[i]=(arr[i]^kb^prev)&0xFF;prev=out[i];}return out;}
+function reverseDiffuseArray(arr,seed){const out=new Uint8ClampedArray(arr.length);const byteRng=makeByteRng(seed);let prev=seed&0xFF;for(let i=0;i<arr.length;i++){const kb=byteRng();out[i]=(arr[i]^kb^prev)&0xFF;prev=arr[i];}return out;}
+function applyPermutation(arr,perm){const out=new Uint8ClampedArray(arr.length);for(let i=0;i<arr.length;i++)out[i]=arr[perm[i]];return out;}
+function reversePermutation(arr,perm){const inv=invertPermutation(perm);const out=new Uint8ClampedArray(arr.length);for(let i=0;i<arr.length;i++)out[i]=arr[inv[i]];return out;}
+function encryptChannelsChannelwise(channels,key){const w=canvas.width,h=canvas.height,baseSeed=(key>>>0);const seeds={R:baseSeed^(w*h+1009),G:baseSeed^(w*h+2027),B:baseSeed^(w*h+3011)};const len=channels.R.length;const permR=makePermutation(len,seeds.R+11);const permG=makePermutation(len,seeds.G+11);const permB=makePermutation(len,seeds.B+11);const pR=applyPermutation(channels.R,permR);const pG=applyPermutation(channels.G,permG);const pB=applyPermutation(channels.B,permB);const dR=diffuseArray(pR,seeds.R+123);const dG=diffuseArray(pG,seeds.G+123);const dB=diffuseArray(pB,seeds.B+123);return {R:dR,G:dG,B:dB,A:channels.A,perm:{R:permR,G:permG,B:permB}};}
+function decryptChannelsChannelwise(channelsEncrypted,key,perms){const w=canvas.width,h=canvas.height,baseSeed=(key>>>0);const seeds={R:baseSeed^(w*h+1009),G:baseSeed^(w*h+2027),B:baseSeed^(w*h+3011)};const undR=reverseDiffuseArray(channelsEncrypted.R,seeds.R+123);const undG=reverseDiffuseArray(channelsEncrypted.G,seeds.G+123);const undB=reverseDiffuseArray(channelsEncrypted.B,seeds.B+123);const origR=reversePermutation(undR,perms.R);const origG=reversePermutation(undG,perms.G);const origB=reversePermutation(undB,perms.B);return {R:origR,G:origG,B:origB,A:channelsEncrypted.A};}
+let lastPerms=null;
+btnEnc.addEventListener('click',()=>{if(!loadedImageData)return alert('Load an image first');const key=Number(keyInput.value)||0;const channels=splitChannels(loadedImageData);const result=encryptChannelsChannelwise(channels,key);const merged=mergeChannels(result.R,result.G,result.B,result.A);ctx.putImageData(new ImageData(merged,canvas.width,canvas.height),0,0);status.textContent='Encrypted ✓';lastPerms=result.perm;});
+btnDec.addEventListener('click',()=>{if(!loadedImageData){const cur=ctx.getImageData(0,0,canvas.width||1,canvas.height||1);if(!cur)return alert('Load the encrypted image first');loadedImageData=cur;}const key=Number(keyInput.value)||0;const perms={R:makePermutation((loadedImageData.data.length/4),((key>>>0)^((canvas.width*canvas.height)+1009))+11),G:makePermutation((loadedImageData.data.length/4),((key>>>0)^((canvas.width*canvas.height)+2027))+11),B:makePermutation((loadedImageData.data.length/4),((key>>>0)^((canvas.width*canvas.height)+3011))+11)};const encChannels=splitChannels(loadedImageData);const decrypted=decryptChannelsChannelwise(encChannels,key,perms);const merged=mergeChannels(decrypted.R,decrypted.G,decrypted.B,decrypted.A);ctx.putImageData(new ImageData(merged,canvas.width,canvas.height),0,0);status.textContent='Decrypted ✓';});
+downloadBtn.addEventListener('click',()=>{const link=document.createElement('a');link.download='result.png';link.href=canvas.toDataURL('image/png');link.click();});
 </script>
-
 </body>
 </html>
